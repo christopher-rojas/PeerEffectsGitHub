@@ -13,7 +13,7 @@ The following Python libraries must be installed in order to use my programs.
 There are separate directories to 1) Download data from the GitHub 
 Archive, 2) Format/Clean the data 3) Perform WRMF-based collaborative filtering using the stars data 4) Match nearest-neighbors 5) Estimate the peer influence effect on the matched sample.
 
-To build everything from scratch, you must run each of these in order. However, I have included some of the finished files in sections 3-5, so you can see how it looks when finished.
+To build everything from scratch, you must run each of these in order. However, I have included the finished file from section 5, so you can see what it looks like when finished.
 
 # 1) Download data from the GitHub Archive
 
