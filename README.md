@@ -33,16 +33,12 @@ After building the file "stars_first.csv" you can do WRMF to get the preference 
 
 In our paper I estimate preferences for each period (month) from January, 2013 to October, 2013, using earlier stars data. The preferences in a given period are computed with all the data prior to the beginning of that period.
 
-I include the output from the first period.
-
 # 4) Nearest-Neighbor Matching
 
 The program "nearestNeighborWRMF.py" will estimate the set of nearest-neighbors for each agent. You must specify the timer period, number of nearest neighbors for each agent, number of months of inactivity which defines exit, and then the directories where the stars/follows data (from 2), and WRMF factor vectors (from 3) are located. The output of this program 
 is a file in which each agent (for whom we can learn preferences) is listed along with their nearest neighbors, and the distance to the neighbor. We use variance-weighted Euclidean distance.
 
 The program "matchTreatedObservations.py" will compute, for each agent and each repo which was recently starred by agent(s) they follow, the nearest non-treated (and non-connected in the social network) agent. You must specify the time period, directories where stars/follows data and WRMF factor vectors are located. You must also set the maximum duration of peer influence, which determines how long in the past someone an agent follows could have starred a repo, for that agent to be considered as treated. The output is a .csv file in which each row corresponds to an agent-repo, and the output includes whether or not the treated agent adopts the item that period (listed as a datetime) and whether or not the matched, non-treated agent adopts the item that period (also listed as a datetime).
-
-I include the nearest-neighbors and matached sample for the first period.
 
 # 5) Estimate Treatment Effect
 
