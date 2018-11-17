@@ -1,2 +1,2 @@
 # PeerEffectsGitHub
-Estimate how much behaviors of individuals are affected by behaviors of their peers on GitHub.
+Estimate how much starring behaviors of individuals are affected by starring behaviors of their followees on GitHub.
