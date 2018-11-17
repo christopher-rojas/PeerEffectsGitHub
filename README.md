@@ -1,16 +1,19 @@
 # PeerEffectsGitHub
-Estimate how much starring behaviors of individuals are affected by starring behaviors of their followees on GitHub.
+
+Estimate how much starring behaviors of individuals are affected by starring behaviors of their followees on GitHub. We estimate peer effects by matching each agent who has followees who starred a repo, with another agent who is similar (in terms of the matching covariates) but does not follow anyone who starred the repo. To determine the matches, we do nearest-neighbor matching. We include in the set of matching covariates the preference vectors estimated by the collaborative filtering algorithm known as Weigthed Regularized Matrix Factorization (WRMF).
 
 # Required Libraries
 The following Python libraries must be installed in order to use my programs.
 1.) Pandas
 2.) Implicit (Benfred/Implicit on GitHub)
 3.) Pymongo
-4.) Numpy, Os, Sys, Time, Gzip, Json, Logging, Urllib2
+4.) Scipy, Numpy, Os, Sys, Time, Gzip, Json, Logging, Urllib2
 
 # Useage Instructions
 There are separate directories to 1) Download data from the GitHub 
 Archive, 2) Format/Clean the data 3) Perform WRMF-based collaborative filtering using the stars data 4) Match nearest-neighbors 5) Estimate the peer influence effect on the matched sample.
+
+To build everything from scratch, you must run each of these in order. However, I have included some of the finished files in sections 2-5, so you can see how it looks when finished.
 
 # 1) Download data from the GitHub Archive
 
@@ -27,3 +30,24 @@ After creating the data, use the programs "ids.py" and "idsMerge.py" to create i
 I have included the finished files for stars and follows, which are called "stars_first.csv" and "follows_first.csv." I have also included the join dates and exit dates for agents, which are called "join_dates_users.csv" and "exit_dates_users.csv."
 
 # 3) Perform WRMF 
+
+After building the file "stars_first.csv" you can do WRMF to get the preference vectors for each agent. You must specify the data directory, the minimum number of items each agent must have to include in WRMF, the hyper-parameters for WRMF, and the time period (month). The output of this program is a .csv file in which each row is an agent, and the columns contain their latent user factors, as well as their user id number. 
+
+In our paper I estimate preferences for each period (month) from January, 2013 to October, 2013, using earlier stars data. The preferences in a given period are computed with all the data prior to the beginning of that period.
+
+I include the output from the first period.
+
+# 4) Nearest-Neighbor Matching
+
+The program "nearestNeighborWRMF.py" will estimate the set of nearest-neighbors for each agent. You must specify the timer period, number of nearest neighbors for each agent, number of months of inactivity which defines exit, and then the directories where the stars/follows data (from 2), and WRMF factor vectors (from 3) are located. The output of this program 
+is a file in which each agent (for whom we can learn preferences) is listed along with their nearest neighbors, and the distance to the neighbor. We use variance-weighted Euclidean distance.
+
+The program "matchTreatedObservations.py" will compute, for each agent and each repo which was recently starred by agent(s) they follow, the nearest non-treated (and non-connected in the social network) agent. You must specify the time period, directories where stars/follows data and WRMF factor vectors are located. You must also set the maximum duration of peer influence, which determines how long in the past someone an agent follows could have starred a repo, for that agent to be considered as treated. The output is a .csv file in which each row corresponds to an agent-repo, and the output includes whether or not the treated agent adopts the item that period (listed as a datetime) and whether or not the matched, non-treated agent adopts the item that period (also listed as a datetime).
+
+I include the nearest-neighbors and matached sample for the first period.
+
+# 5) Estimate Treatment Effect
+
+Program to estimate the peer influence effect by comparing the ratio of items starred by treated agents, to the ratio of items starred by matched, non-treated agents. Treatment can be defined based on the number of a users' followees who recently adopted, and we analyze 1, 2 and 3 adopting leaders. You must specify the periods to include and the directory where the matched-sample is located. You must also specify the type of non-parametric bootstrap method to use for computing 95% confidence intervals: regular or pigeonhole. The output is a .csv file with the mean treatment effect, upper/lower confidence limits, and number of observations, for each level of treatment and each period.
+
+I include the estimated treatment effect output, for periods 1 through 10, using the regular bootstrap.
