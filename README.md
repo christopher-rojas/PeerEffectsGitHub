@@ -13,7 +13,7 @@ The following Python libraries must be installed in order to use my programs.
 There are separate directories to 1) Download data from the GitHub 
 Archive, 2) Format/Clean the data 3) Perform WRMF-based collaborative filtering using the stars data 4) Match nearest-neighbors 5) Estimate the peer influence effect on the matched sample.
 
-To build everything from scratch, you must run each of these in order. However, I have included some of the finished files in sections 2-5, so you can see how it looks when finished.
+To build everything from scratch, you must run each of these in order. However, I have included some of the finished files in sections 3-5, so you can see how it looks when finished.
 
 # 1) Download data from the GitHub Archive
 
@@ -26,8 +26,6 @@ This program will create a mongo database with a separate collection for each mo
 After getting the GH Archive data, we need extract and clean the data that we will be using, which is Stars and Follows. Use the program "starsMongoExtract.py" to take only the stars data out of the database, and use the program "followsMongoExtract.py" to take out the follows data. These programs will create one .csv file for each months' worth of data. Then we can clean and combine the stars and follows files by using the program "combineCleanData.py." This program will clean the data (e.g. drop duplicates) and combine the monthly .csv files into one file, then delete the monthly .csv files. You must specify the range of months for which you have data.
 
 After creating the data, use the programs "ids.py" and "idsMerge.py" to create id numbers for each user and each repo, and to replace usernames and repo names with ids. The program "joinsExitsUsers.py" can be used to build a .csv file with the earliest and latest date that each agent shows up in the data, which we can use as a proxy for join and exit dates. In both the id and join/exit programs, you must specify the directory in which the star and following files are located.
-
-I have included the finished files for stars and follows, which are called "stars_first.csv" and "follows_first.csv." I have also included the join dates and exit dates for agents, which are called "join_dates_users.csv" and "exit_dates_users.csv."
 
 # 3) Perform WRMF 
 
