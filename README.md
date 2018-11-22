@@ -33,6 +33,8 @@ After building the file "stars_first.csv" you can do WRMF to get the preference 
 
 In our paper I estimate preferences for each period (month) from January, 2013 to October, 2013, using earlier stars data. The preferences in a given period are computed with all the data prior to the beginning of that period.
 
+To set the hyper-parameters, we use the data prior to the first period and split it into training/test sets. We compute the expected ranking percentile for different combinations of the hyper-parameters. This can be done with the program hyperparameterEvalExpectedRankingPercentile.py.
+
 # 4) Nearest-Neighbor Matching
 
 The program "nearestNeighborWRMF.py" will estimate the set of nearest-neighbors for each agent. You must specify the timer period, number of nearest neighbors for each agent, number of months of inactivity which defines exit, and then the directories where the stars/follows data (from 2), and WRMF factor vectors (from 3) are located. The output of this program 
