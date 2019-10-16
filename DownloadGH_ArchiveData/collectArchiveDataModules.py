@@ -1,8 +1,6 @@
 #!/usr/bin/env python2.7
 """
 Additional functions used to collect GitHub Archive data and insert into mongodb.
-
-@author: christopherrojas
 """
 
 import logging, urllib2

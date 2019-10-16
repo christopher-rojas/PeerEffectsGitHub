@@ -1,34 +1,36 @@
 #!/usr/bin/env python2
 # -*- coding: utf-8 -*-
 """
-Created on Sat Jan 14 15:32:36 2017
-
-@author: christopherrojas
-
-For each type of data, fix the dates, and drop exact duplicates.
+Modules to clean and combine data.
 """
 
 import pandas as pd
+import logging
 
 def Combine(event,period_range):
-    print event
+    # Combine the individual period .csv files into one combined .csv.
+    # Inputs: the event type and range of periods to combine.    
+    logging.info(event+'_combine')
+    
     for period in period_range:
-        print period
+        
+        logging.info(period)
         data = pd.read_csv(event+'-'+str(period.month)+'-'+str(period.year)+'.csv')
         
         if period==period_range[0]:
-            # Append subsequent months, without headers
-            with open(event+'_first.csv', 'w') as f:
+            # Write the first period to a new file, with headers
+            with open(event+'.csv', 'w') as f:
                 data.to_csv(f, header=True, index=False)
         else:
             # Append subsequent months, without headers
-            with open(event+'_first.csv', 'a') as f:
+            with open(event+'.csv', 'a') as f:
                 data.to_csv(f, header=False, index=False)
 
 def fixDate(string):
-    # Fix some idiosyncracies in how GitHub records datetimes.
+    # Fix some idiosyncracies in how GitHub API records datetimes.
     # Designed to handle repo creation times and link creation times.
-    # Record everything at UTC time.
+    # Convert everything to UTC time.
+    # Input: a date-time string from the GH archive.
     if type(string)==str:
         date = string[0:4] + '-' + string[5:7] + '-' + string[8:10]
         time = 'T' + string[11:19]+'Z'
@@ -37,32 +39,47 @@ def fixDate(string):
         datetime = string
     return datetime
          
-def Clean(event):
-    print event
-    events = pd.read_csv(event+'_first.csv')
+def Clean(event, keep_type):
+        
+    logging.info(event+'_clean')
+    logging.info('kept: '+keep_type)
+    
+    events = pd.read_csv(event+'.csv')
+    # Clean up the date-times of events
     events['created_at'] = events.created_at.apply(lambda x: fixDate(x))
     
     if event=='follows':
-        # Drop erroneous duplicates
+        
+        # Drop mistakes
+        # One agent cannot follow another twice AT THE SAME TIME
         events.drop_duplicates(keep='first',inplace=True)
+        # Drop if missing the follower
         events = events[events.alogin==events.alogin]
+        # Drop if missing the followee
         events = events[events.tlogin==events.tlogin]
+        # Drop if missing the time of link creation
         events = events[events.created_at==events.created_at]
         events.sort_values(by=['alogin','created_at'],inplace=True)
 
-        # Drop repeat follows.
-        events.drop_duplicates(subset=['alogin','tlogin'],keep='first',inplace=True)
-        events.to_csv(event+'_first.csv',index=False,header=True)
+        # Possibly drop duplicates where one agent follows another at different times
+        events.drop_duplicates(subset=['alogin','tlogin'], keep=keep_type, inplace=True)
+        
+        events.to_csv(event+'.csv', index=False, header=True)
                 
-    else:
+    else: # event is stars
+        
+        # For stars, the repo creation time also needs to be cleaned up
         events['repo_created_at'] = events.repo_created_at.apply(lambda x: fixDate(x))
-        # Drop erroneous duplicates        
+        
+        # Drop mistakes again       
+        # An agent cannot star a repo twice AT THE SAME TIME
         events.drop_duplicates(keep='first',inplace=True)
         events = events[events.alogin==events.alogin]
         events = events[events.repo==events.repo]
         events = events[events.created_at==events.created_at]
         events.sort_values(by=['alogin','created_at'],inplace=True)
 
-        # Drop repeat stars
+        # Possibly drop duplicates where one agent stars a repo at different times
         events.drop_duplicates(subset=['alogin','repo'],keep='first',inplace=True)
-        events.to_csv(event+'_first.csv',index=False,header=True)
+        
+        events.to_csv(event+'.csv',index=False,header=True)

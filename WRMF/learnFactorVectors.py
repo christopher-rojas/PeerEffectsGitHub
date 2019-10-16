@@ -1,20 +1,24 @@
 #!/usr/bin/python2.7
 # -*- coding: utf-8 -*-
 """
-Created on Wed Apr 25 12:56:37 2018
-
-@author: christopherrojas
-
-Learn the preference and characteristic vectors with WRMF.
+Learn the preference and characteristic vectors with Weighted, Regularized
+    Matrix Factorization, implemented by the Implicit library.
 """
 
 import pandas as pd
 import numpy as np
 import scipy.sparse as sparse
 import implicit
+import logging
 
-## Events Functions
+#Set up logging
+logging.basicConfig(filename='learn_factor_vectors.log',level=logging.INFO,format='%(asctime)s %(message)s')
+
 def ActiveUsers(activities,minRepo):
+    # We keep only the agents who have starred a minimum number of repos.
+    # Input, the events data (activities), and the minimum number of stars
+    #   needed to keep an agent (minRepo).
+
     X = activities.groupby('userID').repoID.count().reset_index()
     
     activeUsers = X[X.repoID>=minRepo]
@@ -26,39 +30,39 @@ def ActiveUsers(activities,minRepo):
 def map_ids(row, mapper):
     return mapper[row]
 
-# Enter the directory for the data.
+# Enter the directory for the data output from combineCleanData.py.
 data_dir = ""
 
-# Set parameters
-period = 1
-minReposPerUser = 10
-confidence = 1000
-regularize = 50
-nfactors = 100
-numIterations = 15
+###### Parameters that need to be set
+period = 1 # time period
+minReposPerUser = 10 # minimum number of repos to star to infer preferences
+confidence = 1000 # confidence hyper-parameter for WRMF
+regularize = 50 # regularization hyper-parameter for WRMF
+nfactors = 100 # number of latent factors hyper-parameter for WRMF
+numIterations = 15 # number of alternations in alterating least squares, hyper-parameter for WRMF
+start_date = '1/1/2013'
+end_date = '10/1/2013'
+frequency = 'MS' # ensure that the start of a month is the cutoff in our paper
+######
 
-# Set the cutoff date for the given period
-d = pd.date_range(start='1/1/2013', end='10/1/2013', freq='MS')
+# Set the cutoff date for data used to infer preference types
+d = pd.date_range(start=start_date, end=end_date, freq=frequency)
 cutoff_date = d[period-1]
-print cutoff_date
+logging.info("Use data prior to: "+cutoff_date+" to learn preferences.")
 
 # Load data
-df = pd.read_csv(data_dir+'stars_first.csv')
+df = pd.read_csv(data_dir+'stars.csv')
 df['created_at'] = df['created_at'].astype('datetime64[s]')
-print len(df)
 df = df[df.created_at<cutoff_date]
-print len(df)
-
 df = df[['userID','repoID']]
 df.drop_duplicates(inplace=True)
 
+# Drop agents who haven't starred enough items by cutoff_date
 df = ActiveUsers(df,minReposPerUser)
-print "Number of Users: " + str(len(df.userID.unique()))
-print "Number of Repos: " + str(len(df.repoID.unique()))
-print "Number of Observations: " + str(len(df))
 df.columns = ['uid','rid']
 
 # Create mappings
+# taken from www.ethanrosenthal.com/2016/10/19/implicit-mf-part-1/
 rid_to_idx = {}
 idx_to_rid = {}
 for (idx, rid) in enumerate(df.rid.unique().tolist()):
@@ -71,28 +75,35 @@ for (idx, uid) in enumerate(df.uid.unique().tolist()):
     uid_to_idx[uid] = idx
     idx_to_uid[idx] = uid
 
+# build a sparse user-items matrix
 I = df.rid.apply(map_ids, args=[rid_to_idx]).as_matrix()    
 J = df.uid.apply(map_ids, args=[uid_to_idx]).as_matrix()
+# The line below is how this WRMF library incorporates confidence weights
 V = confidence*np.ones(I.shape[0])
 likes = sparse.coo_matrix((V, (I, J)), dtype=np.float64)
 likes = likes.tocsr()
 
-# initialize a model
+# log some info about the user-items matrix
+nrows = np.shape(likes)[0]
+ncols = np.shape(likes)[1]
+logging.info("Size of user-items matrix is: %d by %d" % (nrows,ncols))
+sparsity = float(len(df))/(nrows*ncols)
+logging.info("Sparsity: %f" % sparsity)
+
+# initialize the model
 model = implicit.als.AlternatingLeastSquares(factors=nfactors,regularization=regularize,iterations=numIterations)
-
-# train the model on a sparse matrix of item/user/confidence weights
-print np.shape(likes)
+logging.info("Training model")
+# train the model
 model.fit(likes)
+logging.info("Finished training model")
 
-# retrieve the latent user factors
+# save the output
 user_factors = model.user_factors
 user_factors = pd.DataFrame(user_factors)
 user_factors['userID'] = list(df.uid.unique())
 user_factors.to_csv('stars_user_factors_'+str(period)+'.csv',index=False,header=True)
 
-# retrieve the latent item factors
-#item_factors = model.item_factors
-#item_factors = pd.DataFrame(item_factors)
-#item_factors['repoID'] = list(df.rid.unique())
-#item_factors.to_csv('stars_item_factors_'+str(period)+'.csv',index=False,header=True)
-
+item_factors = model.item_factors
+item_factors = pd.DataFrame(item_factors)
+item_factors['repoID'] = list(df.rid.unique())
+item_factors.to_csv('stars_item_factors_'+str(period)+'.csv',index=False,header=True)

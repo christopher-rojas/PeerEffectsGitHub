@@ -1,11 +1,8 @@
 #!/usr/bin/env python2
 # -*- coding: utf-8 -*-
 """
-Created on Thu Jan 26 09:23:15 2017
-
-@author: christopherrojas
-
-Take the follows data from the db and put into .csv files.
+Take the follows data from the db and put them into .csv files.
+Make sure to run in a Python console, not iPython, for logging.
 """
 
 import logging
@@ -16,9 +13,15 @@ import pandas as pd
 from pymongo import MongoClient
 import unicodecsv as csv
 
+##### PARAMETERS TO ENTER
+start_date = '2011-02-01'
+end_date = '2013-10-31'
+frequency = 'M' # Periods are months
+#####
+
 def Follows(periods):
     """
-    Find the follow events and put into a .csv file.
+    Extract the star events and put them into multiple .csv files, one for each period.
     Input: A date range of periods.
     """
     # Access the DB
@@ -110,6 +113,5 @@ def Follows(periods):
 
     logging.info('Created follows.csv.')
     
-periods = pd.date_range(start='2011-02-01',end='2013-10-31',freq='M')
-print periods
+periods = pd.date_range(start=start_date, end=end_date, freq=frequency)
 Follows(periods)
