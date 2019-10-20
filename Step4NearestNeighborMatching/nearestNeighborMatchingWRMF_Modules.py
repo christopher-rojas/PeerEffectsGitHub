@@ -22,8 +22,8 @@ def convertDates(data,frequency,exact,zeroHour='2013-01-01 00:00:00'):
         convert['cperiod'] = 1+np.floor(convert['cperiod'].round(12))
     return list(convert['cperiod'])
 
-def loadFollows(events_directory,exact=False):
-    follows = pd.read_csv(events_directory+"follows_first"+'.csv')
+def loadFollows(path,exact=False):
+    follows = pd.read_csv(path)
     follows['created_at'] = convertDates(follows['created_at'],[1,'M'],exact)
     return follows
     
@@ -258,3 +258,25 @@ def CountLeaderAdoption(follows,leader_events,follower_events,focalUsers,period,
     
     return treatment_fraction
     
+def dropFollows(currentUsers,follows):
+    
+    follows.columns = ['auserID','a2userID','bad_match']
+    currentUsers = pd.merge(currentUsers,follows,on=['auserID','a2userID'],how='left')
+    currentUsers = currentUsers[currentUsers.bad_match != 1]
+    currentUsers.drop('bad_match',axis=1,inplace=True)
+    follows.columns = ['a2userID','auserID','bad_match']  
+    currentUsers = pd.merge(currentUsers,follows,on=['auserID','a2userID'],how='left')
+    currentUsers = currentUsers[currentUsers.bad_match != 1]
+    currentUsers.drop('bad_match',axis=1,inplace=True)        
+    follows.columns = ['auserID','a2userID','bad_match']
+    
+    return currentUsers
+    
+def saveData(data,counter,output_name):
+    # save/append the fully processed panel chunk
+    if counter==0:
+        with open(output_name, 'w') as f:
+            data.to_csv(f,index=False,header=True)
+    else:
+        with open(output_name, 'a') as f:
+            data.to_csv(f,index=False,header=False)
