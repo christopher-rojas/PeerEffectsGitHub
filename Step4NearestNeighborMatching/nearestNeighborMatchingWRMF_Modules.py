@@ -217,46 +217,80 @@ def GenerateMatches(subUsers,otherCovs,valid_users,prefs,prefs_vars,otherVars,pr
     totalMatches['ranking'] = rankings
     return totalMatches
     
-def CountLeaderAdoption(follows,leader_events,follower_events,focalUsers,period,maxTreatment=3):
+def CountA_TreatmentsOutcomes(aUsersChunk, follows, leader_events, follower_events, period, maxTreatment=3):
     
-    # Count the number of adopting leaders for each user, repo.
+    currentIDs = list(aUsersChunk.auserID.unique())
+    currentFollows = follows[follows.auserID.isin(currentIDs)]
+        
+    # Merge on the treatments, stars by leaders
+    treatments = pd.merge(currentFollows,leader_events,on=['tuserID'],how='left')
     
-    treatment_fraction = pd.merge(follows,leader_events,on=['tuserID'],how='left')
-    
-    # Merge on the events by followers
-    treatment_fraction = pd.merge(treatment_fraction,follower_events,on=['auserID','repoID'],how='left')
+    # Merge on the outcomes, stars by followers
+    treatments_adoptions = pd.merge(treatments,follower_events,on=['auserID','repoID'],how='left')
 
     # Only keep the observation if several conditions are met:
     # First, the follower has not starred the repo by the beginning of the period
-    treatment_fraction = treatment_fraction[~(treatment_fraction.acreated_at < period)] 
+    treatments_adoptions = treatments_adoptions[~(treatments_adoptions.acreated_at < period)] 
     # Second, the follower has not starred it before link creation
-    treatment_fraction = treatment_fraction[~(treatment_fraction.acreated_at < treatment_fraction.created_at)]   
+    treatments_adoptions = treatments_adoptions[~(treatments_adoptions.acreated_at < treatments_adoptions.created_at)]   
     # Third, the follower has not starred it before the leader
-    treatment_fraction = treatment_fraction[~(treatment_fraction.acreated_at < treatment_fraction.tcreated_at)]
-    treatment_fraction.rename(columns={'acreated_at':'a_adopted_at'},inplace=True)
+    treatments_adoptions = treatments_adoptions[~(treatments_adoptions.acreated_at < treatments_adoptions.tcreated_at)]
+    treatments_adoptions.rename(columns={'acreated_at':'a_adopted_at'},inplace=True)
     
-    if focalUsers==True:    
+    # Add the cumulative number of leader adoptions, which is number of treatments
+    treatments_adoptions.sort_values(by=['auserID','tcreated_at'],inplace=True)
+    treatments_adoptions['treatment_num'] = treatments_adoptions.groupby(['auserID','repoID']).tcreated_at.cumcount()
+    treatments_adoptions['treatment_num'] = treatments_adoptions['treatment_num']+1
+    treatments_adoptions = treatments_adoptions[['auserID','repoID','a_adopted_at','tcreated_at','treatment_num']]
         
-        treatment_fraction.drop_duplicates(subset=['dyadID','repoID'],inplace=True)
-        treatment_fraction.sort_values(by=['auserID','tcreated_at'],inplace=True)
-        treatment_fraction['treatment_num'] = treatment_fraction.groupby(['auserID','repoID']).tcreated_at.cumcount()
-        treatment_fraction['treatment_num'] = treatment_fraction['treatment_num']+1
-        treatment_fraction = treatment_fraction[['auserID','repoID','a_adopted_at','tcreated_at','treatment_num']]
-        
-        # The maximum number of treatments
-        treatment_fraction = treatment_fraction[treatment_fraction.treatment_num<=maxTreatment]
+    # The maximum number of treatments
+    treatments_adoptions = treatments_adoptions[treatments_adoptions.treatment_num<=maxTreatment]
 
-        # Set the treatment time.
-        treatment_time = treatment_fraction.groupby(['auserID','repoID']).tcreated_at.max().reset_index()
-        treatment_fraction.drop('tcreated_at',axis=1,inplace=True)
-        treatment_fraction = pd.merge(treatment_fraction,treatment_time,on=['auserID','repoID'],how='left')        
-        
-    else:
-        # Add the treatment count.
-        treatment_fraction = treatment_fraction.groupby(['auserID','repoID']).tuserID.nunique().reset_index()
-        treatment_fraction.rename(columns={'tuserID':'treatment_num'},inplace=True)
+    # Set the treatment time equal to the last time the agent is treated on the item
+    treatment_times = treatments_adoptions.groupby(['auserID','repoID']).tcreated_at.max().reset_index()
+    treatments_adoptions.drop('tcreated_at',axis=1,inplace=True)
+    treatments_adoptions = pd.merge(treatments_adoptions,treatment_times,on=['auserID','repoID'],how='left')        
     
-    return treatment_fraction
+    return treatments_adoptions
+    
+def RemoveBadMatches(a_a2_treat_outs, follows, leader_events, follower_events, period):
+    
+    currentIDs = list(a_a2_treat_outs['a2userID'].unique())
+    currentFollows = follows[follows.auserID.isin(currentIDs)]   
+    
+    bad_treatments = pd.merge(currentFollows, leader_events,on=['tuserID'],how='left')
+    # Merge on the outcomes, stars by followers
+    bad_treatments_adoptions = pd.merge(bad_treatments,follower_events,on=['auserID','repoID'],how='left')
+
+    # Only keep the observation if several conditions are met:
+    # First, the follower has not starred the repo by the beginning of the period
+    bad_treatments_adoptions = bad_treatments_adoptions[~(bad_treatments_adoptions.acreated_at < period)] 
+    # Second, the follower has not starred it before link creation
+    bad_treatments_adoptions = bad_treatments_adoptions[~(bad_treatments_adoptions.acreated_at < bad_treatments_adoptions.created_at)]   
+    # Third, the follower has not starred it before the leader
+    bad_treatments_adoptions = bad_treatments_adoptions[~(bad_treatments_adoptions.acreated_at < bad_treatments_adoptions.tcreated_at)]
+    bad_treatments_adoptions.rename(columns={'acreated_at':'a_adopted_at'},inplace=True)
+    
+    bad_treatments_adoptions = bad_treatments_adoptions.groupby(['auserID','repoID']).tuserID.nunique().reset_index()
+    bad_treatments_adoptions.rename(columns={'tuserID':'treatment_num2', 'auserID':'a2userID'},inplace=True)
+    
+    if len(bad_treatments) > 0:
+        a_a2_treat_outs = pd.merge(a_a2_treat_outs,bad_treatments_adoptions,on=['a2userID','repoID'],how='left')
+        a_a2_treat_outs = a_a2_treat_outs[~(a_a2_treat_outs.treatment_num2 >= a_a2_treat_outs.treatment_num)]
+        a_a2_treat_outs.drop('treatment_num2',axis=1,inplace=True)
+    
+    return a_a2_treat_outs
+    
+def AddOutcomes(a_a2_treat_outs, follower_events, period):
+    
+    potentialMatchFollowerEvents = follower_events.rename(columns={'auserID':'a2userID','acreated_at':'a2_adopted_at'})
+    a_a2_treat_outs = pd.merge(a_a2_treat_outs,potentialMatchFollowerEvents,on=['a2userID','repoID'],how='left')
+        
+    # Drop if the matched user adopts before start of current period, or most recent treatment time, even if they are untreated        
+    a_a2_treat_outs = a_a2_treat_outs[~(a_a2_treat_outs.a2_adopted_at < period)]        
+    a_a2_treat_outs = a_a2_treat_outs[~(a_a2_treat_outs.a2_adopted_at < a_a2_treat_outs.tcreated_at)]
+    
+    return a_a2_treat_outs
     
 def dropFollows(currentUsers,follows):
     
@@ -269,9 +303,9 @@ def dropFollows(currentUsers,follows):
     currentUsers = currentUsers[currentUsers.bad_match != 1]
     currentUsers.drop('bad_match',axis=1,inplace=True)        
     follows.columns = ['auserID','a2userID','bad_match']
-    
+       
     return currentUsers
-    
+     
 def saveData(data,counter,output_name):
     # save/append the fully processed panel chunk
     if counter==0:

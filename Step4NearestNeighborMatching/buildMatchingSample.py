@@ -17,6 +17,10 @@ wrmf_dir = "" # directory where output from WRMF (Step 3) is stored
 data_dir = "" # directory where formatted stars and follows data (Step 2) is stored
 ####################
 
+# If you want to match based on languages, then load the languages csv instead of warm
+# If you want to match on 'Other Attributes' without using past preference data,
+# then just create the matching data without wrmf or langs
+
 #################### LOAD THE DATA
 # Load the user factors
 userFactors = nearestNeighborMatchingWRMF_Modules.loadUserFactors(period,wrmf_dir)

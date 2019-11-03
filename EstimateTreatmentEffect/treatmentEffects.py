@@ -1,9 +1,5 @@
 # -*- coding: utf-8 -*-
 """
-Created on Fri Jun 29 20:04:51 2018
-
-@author: christopherrojas
-
 Estimate the treatment effect, for different numbers of starring followees.
 """
 
