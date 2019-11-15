@@ -15,9 +15,9 @@ logging.basicConfig(filename='GitHubArchiveData.log',level=logging.INFO,format='
 starting_datetime = "2011-2-12-00"
 last_datetime = "2013-10-31 23:00:00"
 # Connect to MongoDB
-# Enter you own host-name, user and password.
+# Enter you own host-name, db_name, user-name and password.
 MONGO_HOST = ""
-MONGO_DB = "GitHub_Archive"
+MONGO_DB = ""
 MONGO_USER = ""
 MONGO_PASSWORD = ""
 #######
@@ -42,7 +42,7 @@ current_datetime = time_periods.pop(0)
 while remaining >= 1:
     # Create a collection for each month of GitHub Archive data.
     month, year = str(current_datetime.month), str(current_datetime.year)
-    coll = db['GitHubArchive'+'-'+month+'-'+year]
+    coll = db[MONGO_DB+'-'+month+'-'+year]
     
     # Datetime needs to be a string for logging and for accessing
     # GitHub archive.

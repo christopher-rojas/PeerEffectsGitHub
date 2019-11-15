@@ -3,7 +3,9 @@
 Additional functions used to collect GitHub Archive data and insert into mongodb.
 """
 
-import logging, urllib2
+import logging
+from urllib.request import urlopen
+import urllib.request
 
 def pretty_string(ugly_datetime):
     # Convert string in standard datetime format to correct format

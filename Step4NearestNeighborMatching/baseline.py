@@ -1,50 +1,54 @@
 #!/usr/bin/python2.7
 # -*- coding: utf-8 -*-
 """
-Combine multiple datasets into a single table for estimating nearest neighbors.
+Combine multiple datasets into a single table of non-preference-based
+ attributes for estimating nearest neighbors.
 Each row is an agent, and each column is an attribute.
 """
 
 import pandas as pd
 import numpy as np
-import nearestNeighborMatchingWRMF_Modules
+import nearestNeighborMatching_Modules
 
-################### PARAMETERS THAT NEED TO BE SET
-period = 1 # Time period (months in paper)
+################### PARAMETERS TO ENTER
+period = 1 # Time period
 numMonthsExit = 6 # The number of months after last agent activity when we consider them to "exit"
 
-wrmf_dir = "" # directory where output from WRMF (Step 3) is stored
-data_dir = "" # directory where formatted stars and follows data (Step 2) is stored
-####################
+wrmf_data_dir = "" # directory where output from WRMF (Step 3) is stored
+wrmf_filename = ""
+events_data_dir = "" # directory where formatted stars, follows and joins/exits data (Step 2) is stored
+stars_filename = "stars.csv"
+follows_filename = "follows.csv"
+exits_users_filename = "exitUsers.csv" # The date of last activity for each agent
+joins_users_filename = "joinUsers.csv" # The date of earliest activity for each agent 
 
-# If you want to match based on languages, then load the languages csv instead of warm
-# If you want to match on 'Other Attributes' without using past preference data,
-# then just create the matching data without wrmf or langs
+output_data_dir = "" # directory where output is stored
+output_filename = "baseline.csv" 
+#################### MODIFY BELOW THIS LINE AT YOUR OWN RISK
 
 #################### LOAD THE DATA
-# Load the user factors
-userFactors = nearestNeighborMatchingWRMF_Modules.loadUserFactors(period,wrmf_dir)
 
-# Normalize the factor vectors
-userFactors = nearestNeighborMatchingWRMF_Modules.normalizeUserFactors(userFactors)
+# We focus our analysis on users who were valid for WRMF
+    # Only reason we need user factors in this program
+userFactors = pd.read_csv(wrmf_data_dir+wrmf_filename,usecols=['userID'])
 wrmf_users = list(userFactors['userID'].unique())
 
 # Load the behaviors which were used to learn preferences,
 # and count the total number per user.
-events = nearestNeighborMatchingWRMF_Modules.loadEvents(data_dir)
+events = nearestNeighborMatching_Modules.loadEvents(events_data_dir+stars_filename)
 events = events[['userID','repoID','created_at']]
 events = events[events.created_at<=period]
 
 # Load the agents who have not exited. 
-exits = nearestNeighborMatchingWRMF_Modules.loadExitsUsers(data_dir,numMonthsExit)
+exits = nearestNeighborMatching_Modules.loadExitsUsers(events_data_dir + exits_users_filename,numMonthsExit)
 exits = exits[exits.exited_at >= period]
 non_exit_users = list(exits['userID'].unique())
 
 # Load the time experience of each agent
-experience = nearestNeighborMatchingWRMF_Modules.loadExperienceUsers(data_dir,period)
+experience = nearestNeighborMatching_Modules.loadExperienceUsers(events_data_dir + joins_users_filename,period)
 
 # Load the follows
-follows = nearestNeighborMatchingWRMF_Modules.loadFollows(data_dir)
+follows = nearestNeighborMatching_Modules.loadFollows(events_data_dir+follows_filename)
 follows = follows[follows.created_at<=period]
 follows = follows[['auserID','tuserID','created_at']]
 ####################
@@ -57,7 +61,6 @@ users = pd.DataFrame(users)
 users.columns=['auserID']
 
 valid_users = list(users.auserID.unique())
-userFactors = userFactors[userFactors.userID.isin(valid_users)]
 ####################
 
 #################### OTHER DATA FOR MATCHING
@@ -134,7 +137,7 @@ avgLeaderExp = avgLeaderExp[avgLeaderExp.auserID.isin(valid_users)]
 experience = experience[experience.auserID.isin(valid_users)]
 
 # Merge everything to create the matching data
-matchingData = pd.merge(userFactors,outDegree,on=['auserID'], how='left')
+matchingData = pd.merge(users,outDegree,on=['auserID'], how='left')
 matchingData = pd.merge(matchingData,avgLeaderOut,on=['auserID'], how='left')
 matchingData = pd.merge(matchingData,inDegree,on=['auserID'],how='left')
 matchingData = pd.merge(matchingData,avgLeaderIn,on=['auserID'],how='left')
@@ -144,4 +147,4 @@ matchingData = pd.merge(matchingData,experience,on=['auserID'],how='left')
 matchingData = pd.merge(matchingData,avgLeaderExp,on=['auserID'],how='left')
 
 # Save the data
-matchingData.to_csv(c,index=False,header=True)
+matchingData.to_csv(output_data_dir + output_filename,index=False)

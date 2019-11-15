@@ -1,28 +1,40 @@
 # -*- coding: utf-8 -*-
 """
-For each treated agent-repo, match treated agent with the closest non-treated agent.
+For each treated observation (agent-repo), record the treated agent's adoption time
+during the period (empty if not adopted). Then match the treated agent with the closest valid agent,
+meaning an agent who has not adopted by treatment time, and is not treated by end of period.
+Finally, record the matched, non-treated agent's adoption time during the period.
 """
 
-import nearestNeighborMatchingWRMF_Modules
+import nearestNeighborMatching_Modules
 import pandas as pd
 import numpy as np
 import logging
 
-logging.basicConfig(filename='matchTreatments.log',level=logging.INFO,format='%(asctime)s %(message)s')
-        
 ####################### PARAMETERS THAT NEED TO BE SET.
-period = 1
-stars_path = '' # directory where the formatted stars data (step 2) is stored)
-follows_path = '' # directory where the formatted follows data (step 2) is stored
-neighbors_path = '' # directory where the nearest neighbors data (step 4) is stored
+period = 1 # time period
+stars_dir = '' # directory where the formatted stars data (step 2) is stored)
+stars_filename = 'stars.csv'
+follows_dir = '' # directory where the formatted follows data (step 2) is stored
+follows_filename = 'follows.csv'
+neighbors_dir = '' # directory where the nearest neighbors data (step 4) is stored
+neighbors_filename = ''
 duration = 3 # the number of past periods to include in treatment
-output_path= ''
-####################### 
+output_dir = ''
+output_filename = 'matched_sample_outcomes.csv'
 
-####################### END OF USER INPUTS #######################
+# May create an additional output table with more info
+# about adopting leaders.
+# Needed for some heterogeneity analysis in our paper.
+verbose = False  # If True then you need to add directory and filename
+verbose_output_dir = ''
+verbose_output_filename = 'matches_leader_adoptions.csv'
+####################### MODIFY BELOW THIS LINE AT YOUR OWN RISK
+
+logging.basicConfig(filename='matchTreatments.log',level=logging.INFO,format='%(asctime)s %(message)s')
 
 ####################### LOAD THE MATCHED PAIRS
-matched_pairs = pd.read_csv(neighbors_path)
+matched_pairs = pd.read_csv(neighbors_dir+neighbors_filename)
 matched_pairs = matched_pairs[matched_pairs['auserID'] != matched_pairs['a2userID']] # the closest neighbor is oneself
 ausers = list(matched_pairs.auserID.unique())
 a2users = list(matched_pairs.a2userID.unique())
@@ -30,13 +42,13 @@ a2users = list(matched_pairs.a2userID.unique())
 
 ####################### LOAD THE FOLLOWS
 # Start with all the follows (need the exact datetimes, so set exact=True)
-follows = nearestNeighborMatchingWRMF_Modules.loadFollows(follows_path,exact=True)
+follows = nearestNeighborMatching_Modules.loadFollows(follows_dir+follows_filename,exact=True)
 follows = follows[(follows.auserID.isin(ausers+a2users))]
 follows = follows[(follows.created_at<period+1)]
 #######################
 
 ####################### LOAD THE STARS
-follower_events = nearestNeighborMatchingWRMF_Modules.loadEvents(stars_path,True)
+follower_events = nearestNeighborMatching_Modules.loadEvents(stars_dir+stars_filename,True)
 follower_events = follower_events[['userID','repoID','created_at']]
 follower_events = follower_events[follower_events.created_at<period+1]
 
@@ -65,7 +77,7 @@ logging.info("Number of Agents: %d" % (len(aUsers)))
 
 while finishedMatchingAll==False:
 
-    logging.info("Iteration: %d" % (str(ausersIterator)))
+    logging.info("Iteration: %d" % (ausersIterator))
     
     # Grab the current batch of users
     if (ausersIterator+1)*10000 < total:
@@ -75,11 +87,15 @@ while finishedMatchingAll==False:
         finishedMatchingAll=True
     
     # First, get the all of the potential treatments and outcomes for the actual treated agents
-    a_treat_out = nearestNeighborMatchingWRMF_Modules.CountATreatmentsOutcomes(aUsersChunk, 
+    a_treat_out = nearestNeighborMatching_Modules.CountA_TreatmentsOutcomes(aUsersChunk, 
                                                                                follows, 
                                                                                leader_events, 
                                                                                follower_events,
-                                                                               period)    
+                                                                               period,
+                                                                               verbose,
+                                                                               verbose_output_dir,
+                                                                               verbose_output_filename,
+                                                                               ausersIterator)    
     a_treat_out['observation'] = a_treat_out.index
     
     ###################### FIND CLOSEST NON-TREATED AGENT FOR EACH TREATED AGENT-REPO
@@ -91,7 +107,7 @@ while finishedMatchingAll==False:
     
     while finishedMatching==False:
         
-        logging.info("Ranking: %d" % (str(min_ranking)))
+        logging.info("Ranking: %d" % (min_ranking))
         
         # Grab the current ranking of nearest neighbors
         if (min_ranking+shift)==max_ranking:
@@ -103,7 +119,7 @@ while finishedMatchingAll==False:
         # Take the unmatched ones, so far, and try to match them
         if min_ranking==1:
             final_matches = np.nan
-            a_a2_treat_outs = a_treat_out.copy(drop = True)
+            a_a2_treat_outs = a_treat_out.copy()
         else:
             a_a2_treat_outs  = a_treat_out[~(a_treat_out.observation.isin(list(final_matches.observation.unique())))]
 
@@ -113,7 +129,7 @@ while finishedMatchingAll==False:
         a_a2_treat_outs = a_a2_treat_outs[a_a2_treat_outs.a2userID==a_a2_treat_outs.a2userID]
         
         # Remove the matches who are not valid for this item (e.g. starred it before the current period)
-        a_a2_treat_outs = nearestNeighborMatchingWRMF_Modules.RemoveBadMatches(a_a2_treat_outs, 
+        a_a2_treat_outs = nearestNeighborMatching_Modules.RemoveBadMatches(a_a2_treat_outs, 
                                                                                follows,
                                                                                leader_events,
                                                                                follower_events,
@@ -121,7 +137,7 @@ while finishedMatchingAll==False:
         
         
         # Make sure a2 doesn't adopt before t, and add time of a2 adoption
-        a_a2_treat_outs = nearestNeighborMatchingWRMF_Modules.AddOutcomes(a_a2_treat_outs,                                         
+        a_a2_treat_outs = nearestNeighborMatching_Modules.AddOutcomes(a_a2_treat_outs,                                         
                                                                           follower_events,
                                                                           period)
                                                                           
@@ -142,6 +158,6 @@ while finishedMatchingAll==False:
     final_matches.drop('observation',axis=1,inplace=True)   
     final_matches.drop_duplicates(subset=['auserID','repoID','treatment_num'],inplace=True,keep='first')    
     
-    nearestNeighborMatchingWRMF_Modules.saveData(final_matches, ausersIterator, output_path)
+    nearestNeighborMatching_Modules.saveData(final_matches, ausersIterator, output_dir+output_filename)
    
     ausersIterator += 1

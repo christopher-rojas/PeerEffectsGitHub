@@ -6,8 +6,11 @@ Created on Thu Mar 22 16:51:31 2018
 """
 import pandas as pd
 import numpy as np
+from scipy import sparse
+from scipy.spatial import distance
 
 def convertDates(data,frequency,exact,zeroHour='2013-01-01 00:00:00'):
+    # Turn datetimes into time periods
     convert = pd.DataFrame()
     convert['created_at'] = list(data)
     convert['created_at'].fillna('1970-01-01T00:00:00Z',inplace=True)
@@ -22,24 +25,27 @@ def convertDates(data,frequency,exact,zeroHour='2013-01-01 00:00:00'):
         convert['cperiod'] = 1+np.floor(convert['cperiod'].round(12))
     return list(convert['cperiod'])
 
-def loadFollows(path,exact=False):
-    follows = pd.read_csv(path)
+def loadFollows(data_path,exact=False):
+    follows = pd.read_csv(data_path)
     follows['created_at'] = convertDates(follows['created_at'],[1,'M'],exact)
     return follows
     
-def loadEvents(events_directory,exact=False):
-    events = pd.read_csv(events_directory+'stars_first.csv') 
+def loadEvents(data_path,exact=False):
+    # Load stars
+    events = pd.read_csv(data_path) 
     events['created_at'] = convertDates(events['created_at'],[1,'M'],exact)
     return events
     
-def loadExitsUsers(exits_directory,time_after,exact=False):
-    exits = pd.read_csv(exits_directory+'exitDatesUsers.csv')
+def loadExitsUsers(data_path,time_after,exact=False):
+    exits = pd.read_csv(data_path)
     exits['exited_at'] = convertDates(exits['exited_at'],[1,'M'],exact)
     exits['exited_at'] = exits['exited_at'] + time_after   
     return exits
 
-def loadExperienceUsers(joins_directory,current_period,exact=False):
-    joins = pd.read_csv(joins_directory+'joinDatesUsers.csv')
+def loadExperienceUsers(data_path,current_period,exact=False):
+    # Use joins data to estimate experience (number of periods)
+    # since user first appeared in data, to beginning of period
+    joins = pd.read_csv(data_path)
     joins.rename(columns={'joined_at_arch':'joined_at'},inplace=True)
     joins = joins[['userID','joined_at']]
     joins['joined_at'] = convertDates(joins['joined_at'],[1,'M'],exact)
@@ -47,15 +53,35 @@ def loadExperienceUsers(joins_directory,current_period,exact=False):
     
     return joins[['userID','experience']]
        
-def loadUserFactors(period,wrmf_directory):
-    # Load the information on number of users and factors
-    model = pd.read_csv(wrmf_directory+'stars_user_factors_'+str(period)+'.csv')
-    return model
+def loadWRMF_Prefs_User(wrmf_dir, wrmf_filename):
+    prefs = pd.read_csv(wrmf_dir+wrmf_filename)
+    prefs = normalizeUserFactors(prefs)
+    prefs.rename(columns={'userID':'auserID'},inplace=True)
+    return prefs
+
+def loadLangPrefs(langs_dir, langs_filename):
+    prefs = pd.read_csv(langs_dir+langs_filename)
+    prefs.rename(columns={'userID':'auserID'},inplace=True)
+    return prefs
     
+def loadActsPrefs(acts_dir, acts_filename, acts_user_id_mapping, acts_repo_id_mapping):
+    prefs = sparse.load_npz(acts_dir+acts_filename)
+    user_mapping = pd.read_csv(acts_dir + acts_user_id_mapping)
+    repo_mapping = pd.read_csv(acts_dir + acts_repo_id_mapping)
+    
+    user_mapping.rename(columns={'userID':'auserID'},inplace=True)
+    return prefs, user_mapping, repo_mapping
+
+
+
 def userFactorVariances(user_factors):
+    
     factor_columns = [str(x) for x in range(0,user_factors.shape[1]-1)]
     variances = user_factors[factor_columns].var()
     return variances
+
+#### WRMF User factors have magnitude proportional to number of events
+#### We record this separately, so normalize by dividing by variance
     
 def normalizeUserFactors(user_factors):
     
@@ -67,157 +93,134 @@ def normalizeUserFactors(user_factors):
     
     return user_factors 
     
-def map_ids(row, mapper):
-    return mapper[row]
+def PrepActs(preferences, acts_repo_mapping, stars_dir, stars_filename, period, valid_users):
     
-def latentFactorsDistance(agent1_ids,agent2_ids,agent1,agent2,userFactors,factorVars):
+    # Estimate variances for adoption matrix nearest neighbor matching
     
-    # Compute the total weighted (squared) distance between two agents' WRMF preference vectors.    
+    stars = loadEvents(stars_dir + stars_filename) 
+    stars = stars[stars.created_at < period]
+    stars = stars[stars.userID.isin(list(valid_users.auserID.unique()))]
+    stars = stars[['userID','repoID']]  
     
-    factor_columns = [str(x) for x in range(0,userFactors.shape[1]-1)]
-    agent1_factor_columns = [agent1+str(x) for x in range(0,userFactors.shape[1]-1)]     
-    agent2_factor_columns = [agent2+str(x) for x in range(0,userFactors.shape[1]-1)] 
+    # You could change for weight not equal to 1.
+    stars['weight'] = 1
+    
+    #### Keep only the repos that at least one agent stars
+    valid_repos = list(stars.repoID.unique())
+    acts_repo_mapping = acts_repo_mapping[acts_repo_mapping.repoID.isin(valid_repos)]
+    repo_idx = list(acts_repo_mapping.idx.unique())
+    preferences = preferences[repo_idx,:]
+    preferences = preferences.transpose()
+    
+    #################### VARIANCE FOR PREFERENCE COVARIATES
+    stars.sort_values(by='repoID',inplace=True)
+    # Create the df for the variances for each repo covariate
+    repo_vars = stars.groupby('repoID').weight.sum().reset_index()
+    repo_vars['N'] = len(valid_users)
+    repo_vars['sample_mean'] = repo_vars['weight']/repo_vars['N']
+    repo_vars['bernoulli_variance'] = (repo_vars['sample_mean'])*(1-repo_vars['sample_mean'])
+    repo_vars['variance'] = repo_vars['N']*repo_vars['bernoulli_variance']
+    repo_vars['inv_var'] = 1/repo_vars['variance'] 
+    
+    repo_vars = pd.merge(acts_repo_mapping, repo_vars, on = 'repoID', how='left')    
+    repo_vars.sort_values(by='idx',inplace=True)
+    
+    repo_vars_diag = repo_vars['inv_var'].values
+    repo_vars = sparse.diags(repo_vars_diag,0,format="csr")
+    ####################
+    
+    return preferences, repo_vars
 
-    # Merge the user preference factors onto the links data
-    userFactors.columns = agent1_factor_columns+[agent1+'userID']
-    agent1_factors = pd.merge(agent1_ids,userFactors,on=agent1+'userID',how='left')
-    agent1_factors = agent1_factors[agent1_factor_columns].values
-    agent1_factors_T = agent1_factors.transpose()    
+def PairwiseDistDense(sample, currentSampleA, currentSampleB): 
     
-    userFactors.columns = agent2_factor_columns+[agent2+'userID']
-    agent2_factors = pd.merge(agent2_ids,userFactors,on=agent2+'userID',how='left')
-    agent2_factors = agent2_factors[agent2_factor_columns].values
-    agent2_factors_T = agent2_factors.transpose()     
+    # Estimate distance for wrmf or language vectors
     
-    userFactors.columns = factor_columns+['userID']
+    subsampleA = sample[sample.auserID.isin(list(currentSampleA.auserID.unique()))]
+    subsampleB = sample[sample.auserID.isin(list(currentSampleB.auserID.unique()))]
+
+    subsampleA = subsampleA.loc[:, (subsampleA != 0).any(axis=0)] 
+    subsampleB = subsampleB.loc[:, (subsampleB != 0).any(axis=0)]
+    
+    # cdist can only include non-zero columns, so drop any zero columns
+    colsA = set(subsampleA.columns)   
+    colsB = set(subsampleB.columns)
+    cols = list(colsA & colsB)
+    subsampleA = subsampleA[cols]
+    subsampleB = subsampleB[cols]         
+    
+    A = subsampleA.loc[:,subsampleA.columns != 'auserID'].as_matrix()
+    B = subsampleB.loc[:,subsampleB.columns != 'auserID'].as_matrix() 
+    
+    # estimate variance from whole sample
+    current_vars = sample[cols]
+    current_vars = np.var(current_vars.loc[:,current_vars.columns != 'auserID'], axis=0, ddof=1)    
+    
+    # compute inverse-variance weighted distances
+    pairwise_distances = distance.cdist(A, B, 'seuclidean', V=current_vars) 
+
+    return pairwise_distances
+    
+def PairwiseDistSparse(preferences,acts_user_mapping, currentSampleA, 
+                       currentSampleB, other_attributes, thetas_prefs):
+    
+    # combine adoption matrix distance and other attribute distances
+    
+    acts_distance_squared = activitiesDistance(currentSampleA, currentSampleB, acts_user_mapping,
+                                  preferences, thetas_prefs) #squared distance
+    
+    otherAttributes_distance = PairwiseDistDense(other_attributes, currentSampleA,
+                                                 currentSampleB)
+                                        
+    otherAttributes_distance_squared = np.square(otherAttributes_distance)
+
+    pairwise_distances = acts_distance_squared + otherAttributes_distance_squared
+
+    return pairwise_distances
+    
+def activitiesDistance(agent1_ids, agent2_ids, user_mapping, likes, repo_vars):
+    
+    # estimate distance with sparse binary adoption matrix
+    
+     # Get the matrix of likes for each subset of agents
+    agent1_idx = pd.merge(agent1_ids, user_mapping, on='auserID', how='left')
+    agent1_idx = list(agent1_idx.idx)
+    agent2_idx = pd.merge(agent2_ids, user_mapping, on='auserID', how='left')
+    agent2_idx = list(agent2_idx.idx)
+        
+    agent1_likes = likes[agent1_idx,]
+    agent1_likes_T = agent1_likes.transpose()
+    
+    agent2_likes = likes[agent2_idx,]
+    agent2_likes_T = agent2_likes.transpose()
 
     # Compute the weighted number of likes by each
-    num_both1 = factorVars.dot(agent1_factors_T)
-    num_both1 = agent1_factors.dot(num_both1)
+    num_both1 = repo_vars.dot(agent1_likes_T)
+    num_both1 = agent1_likes.dot(num_both1)
     num_both1 = num_both1.diagonal()
-    
-    num_both2 = factorVars.dot(agent2_factors_T)
-    num_both2 = agent2_factors.dot(num_both2)
+
+    num_both2 = repo_vars.dot(agent2_likes_T)
+    num_both2 = agent2_likes.dot(num_both2)
     num_both2 = num_both2.diagonal()
-    
-    num_both1 = np.array([num_both1,]*len(agent2_ids))
+
+    num_both1 = np.array([num_both1,]*len(agent2_idx))
     num_both1 = num_both1.transpose()
-    num_both2 = np.array([num_both2,]*len(agent1_ids))
+    num_both2 = np.array([num_both2,]*len(agent1_idx))
     
     # Compute the weighted number of likes by both  
-    num_both = factorVars.dot(agent2_factors_T)
-    num_both = agent1_factors.dot(num_both) 
+    num_both = repo_vars.dot(agent2_likes_T)
+
+    num_both = agent1_likes.dot(num_both)
+    num_both = num_both.todense()
     num_both = -2*num_both
-    
-    wrmf_distance = num_both1+num_both2+num_both    
-    
-    return wrmf_distance
-    
-def otherAttributeDistance(agent1_ids,agent2_ids,agent1,agent2,otherCovs,otherVars,variableName):
-    
-    # Compute the weighted (squared) distance between an attribute (besides WRMF) of two agents
-    
-    current = otherCovs[variableName]
-    currentVar = otherVars[variableName]
-    
-    # Merge the number of repos onto the links data
-    current.rename(columns={'userID':agent1+'userID',variableName:agent1+'_'+variableName},inplace=True)
-    agent1_variable = pd.merge(agent1_ids,current,on=agent1+'userID',how='left')
-    current.rename(columns={agent1+'userID':agent2+'userID',agent1+'_'+variableName:agent2+'_'+variableName},inplace=True)    
-    agent2_variable = pd.merge(agent2_ids,current,on=agent2+'userID',how='left')
-    current.rename(columns={agent2+'userID':'userID',agent2+'_'+variableName:variableName},inplace=True)
-    
-    num1 = np.array([agent1_variable[agent1+'_'+variableName],]*len(agent2_ids)).transpose()   
-    num2 = np.array([agent2_variable[agent2+'_'+variableName],]*len(agent1_ids))
-    num_diff = num1 - num2
-    num_diff = np.square(num_diff)
-    num_diff = currentVar*num_diff
-    
-    return num_diff
-    
-def computeWeightedDistance(agent1_ids,agent2_ids,agent1,agent2,otherCovs,prefs,prefs_vars,otherVars):
 
-    # Compute total weighted distance between two agents.
-
-    distance = latentFactorsDistance(agent1_ids,agent2_ids,agent1,agent2,prefs,prefs_vars)
+    acts_distance = num_both1 + num_both2 + num_both
+    acts_distance = np.asarray(acts_distance)
     
-    for variable in otherCovs.keys():
-        attribute_distance = otherAttributeDistance(agent1_ids,agent2_ids,agent1,agent2,otherCovs,otherVars,variable)
-        distance += attribute_distance
+    return acts_distance    
     
-    return distance
+def CountA_TreatmentsOutcomes(aUsersChunk, follows, leader_events, follower_events, period, verbose, verbose_output_dir, verbose_output_filename, iterator, maxTreatment=3):
     
-def GenerateMatches(subUsers,otherCovs,valid_users,prefs,prefs_vars,otherVars,prefType,follows,num_per,num_sample=5000):
-    
-    # Compute the nearest neighbors for a group of agents.
-    
-    totalMatches = pd.DataFrame()
-    iteration = 0
-    finishedUsers = False
-    valid_users_df = pd.DataFrame(valid_users)
-    valid_users_df.columns=['a2userID']
-    rankings = range(0,num_per)*len(subUsers)
-    
-    while finishedUsers==False:
-        
-        print "a2Users Iterator: " + str(iteration)
-        
-        # Grab the current batch of dyads. num_sample must be larger than num_per
-        if (iteration+1)*num_sample < len(valid_users):
-            potentialMatches = valid_users_df.iloc[iteration*num_sample:(iteration+1)*num_sample]
-        else:
-            potentialMatches = valid_users_df.iloc[iteration*num_sample:]
-            finishedUsers=True
-            
-        # You need to create the distances between them.
-        a_a2_distances = computeWeightedDistance(subUsers[['auserID']],potentialMatches[['a2userID']],'a','a2',otherCovs,prefs,prefs_vars,otherVars)
-        
-        # Get the column indices of top num_per closest users for each user so far.
-        # The row index gives you auser, column index a2user.
-        num_cols = np.shape(a_a2_distances)[1]
-        current_num_per = min(num_per,num_cols)
-        min_distances_arg = np.argpartition(a_a2_distances,current_num_per)[:,:current_num_per]
-        min_distances_arg = min_distances_arg.flatten()
-        closest_a2_users = potentialMatches['a2userID'].values[min_distances_arg]
-        closest_a2_users = np.transpose(closest_a2_users)
-        min_distances = np.partition(a_a2_distances,current_num_per)[:,:current_num_per]
-        min_distances = min_distances.flatten()
-        min_distances = np.transpose(min_distances)
-        
-        currentUsers = subUsers.loc[subUsers.index.repeat(current_num_per)].reset_index(drop=True)       
-        currentUsers['a2userID'] = closest_a2_users
-        currentUsers['distance'] = min_distances
-        
-        # Drop users who are directly connected to each other in the social network,
-        # prior to the end of current period.
-        follows.columns = ['auserID','a2userID','bad_match']
-        currentUsers = pd.merge(currentUsers,follows,on=['auserID','a2userID'],how='left')
-        currentUsers = currentUsers[currentUsers.bad_match != 1]
-        currentUsers.drop('bad_match',axis=1,inplace=True)
-        follows.columns = ['a2userID','auserID','bad_match']  
-        currentUsers = pd.merge(currentUsers,follows,on=['auserID','a2userID'],how='left')
-        currentUsers = currentUsers[currentUsers.bad_match != 1]
-        currentUsers.drop('bad_match',axis=1,inplace=True)        
-        follows.columns = ['auserID','a2userID','bad_match']
-        
-        # The observations that remain are valid matches.
-        if iteration>0:
-            totalMatches = pd.concat([totalMatches,currentUsers],axis=0,ignore_index=True)
-        else:
-            totalMatches = currentUsers.copy()
-        totalMatches = totalMatches[['auserID','a2userID','distance']]
-        
-        # Sort by agent ID number and distance.
-        totalMatches.sort_values(by=['auserID','distance'],inplace=True)
-        totalMatches = totalMatches.groupby('auserID').head(num_per).reset_index()
-        totalMatches = totalMatches[['auserID','a2userID','distance']]
-           
-        iteration+=1
-        
-    totalMatches['ranking'] = rankings
-    return totalMatches
-    
-def CountA_TreatmentsOutcomes(aUsersChunk, follows, leader_events, follower_events, period, maxTreatment=3):
+    # Estimate treatment intensity and adoption outcomes for given agents
     
     currentIDs = list(aUsersChunk.auserID.unique())
     currentFollows = follows[follows.auserID.isin(currentIDs)]
@@ -237,6 +240,10 @@ def CountA_TreatmentsOutcomes(aUsersChunk, follows, leader_events, follower_even
     treatments_adoptions = treatments_adoptions[~(treatments_adoptions.acreated_at < treatments_adoptions.tcreated_at)]
     treatments_adoptions.rename(columns={'acreated_at':'a_adopted_at'},inplace=True)
     
+    if verbose==True:
+        adopting_leaders = treatments_adoptions[['auserID','tuserID','repoID']]    
+        saveData(adopting_leaders, iterator, verbose_output_dir + verbose_output_filename)
+        
     # Add the cumulative number of leader adoptions, which is number of treatments
     treatments_adoptions.sort_values(by=['auserID','tcreated_at'],inplace=True)
     treatments_adoptions['treatment_num'] = treatments_adoptions.groupby(['auserID','repoID']).tcreated_at.cumcount()
@@ -254,6 +261,8 @@ def CountA_TreatmentsOutcomes(aUsersChunk, follows, leader_events, follower_even
     return treatments_adoptions
     
 def RemoveBadMatches(a_a2_treat_outs, follows, leader_events, follower_events, period):
+    
+    # Remove invalid treatments (e.g. follower starred before leader)
     
     currentIDs = list(a_a2_treat_outs['a2userID'].unique())
     currentFollows = follows[follows.auserID.isin(currentIDs)]   
@@ -283,6 +292,8 @@ def RemoveBadMatches(a_a2_treat_outs, follows, leader_events, follower_events, p
     
 def AddOutcomes(a_a2_treat_outs, follower_events, period):
     
+    # Add counterfactual outcome
+    
     potentialMatchFollowerEvents = follower_events.rename(columns={'auserID':'a2userID','acreated_at':'a2_adopted_at'})
     a_a2_treat_outs = pd.merge(a_a2_treat_outs,potentialMatchFollowerEvents,on=['a2userID','repoID'],how='left')
         
@@ -293,6 +304,8 @@ def AddOutcomes(a_a2_treat_outs, follower_events, period):
     return a_a2_treat_outs
     
 def dropFollows(currentUsers,follows):
+    
+    # Remove observation if treated and counterfactual agent are connected in social network
     
     follows.columns = ['auserID','a2userID','bad_match']
     currentUsers = pd.merge(currentUsers,follows,on=['auserID','a2userID'],how='left')
