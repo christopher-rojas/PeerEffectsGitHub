@@ -1,3 +1,3 @@
-#PeerEffectsGitHub
+# PeerEffectsGitHub
 
 Estimate how much starring behaviors of individuals are affected by starring behaviors of the people they follow on GitHub. We estimate peer effects by matching agent-repos; we match each each agent who follows people who recently starred a particular repo, with another agent who is similar (in terms of the matching covariates) but does not follow anyone who recently starred the repo. To determine the matches, we do nearest-neighbor matching. For our preferred specification, we include in the set of matching covariates the preference vectors estimated by the collaborative filtering algorithm Weigthed Regularized Matrix Factorization (WRMF).
