@@ -1,17 +1,6 @@
-# PeerEffectsGitHub
-
-Estimate how much starring behaviors of individuals are affected by starring behaviors of their followees on GitHub. We estimate peer effects by matching each agent who has followees who starred a repo, with another agent who is similar (in terms of the matching covariates) but does not follow anyone who starred the repo. To determine the matches, we do nearest-neighbor matching. We include in the set of matching covariates the preference vectors estimated by the collaborative filtering algorithm known as Weigthed Regularized Matrix Factorization (WRMF).
-
-# Required Libraries
-The following Python libraries must be installed in order to use my programs.
-1.) Pandas
-2.) Implicit (Benfred/Implicit on GitHub)
-3.) Pymongo
-4.) Scipy, Numpy, Os, Sys, Time, Gzip, Json, Logging, Urllib2
-
 # Useage Instructions
 There are separate directories to 1) Download data from the GitHub 
-Archive, 2) Format/Clean the data 3) Perform WRMF-based collaborative filtering using the stars data 4) Match nearest-neighbors 5) Estimate the peer influence effect on the matched sample.
+Archive, 2) Format/Clean the data 3) Estimate Preferences 4) Match nearest-neighbors 5) Estimate the peer influence effect on the matched sample.
 
 To build everything from scratch, you must run each of these in order. However, I have included the finished file from section 5, so you can see what it looks like when finished.
 
