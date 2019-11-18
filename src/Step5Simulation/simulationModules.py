@@ -40,7 +40,6 @@ def loadExitsUsers(exits_directory,time_after,exact=False):
 
 def loadExperienceUsers(joins_directory,current_period,exact=False):
     joins = pd.read_csv(joins_directory+'joinDatesUsers.csv')
-    joins.rename(columns={'joined_at_arch':'joined_at'},inplace=True)
     joins = joins[['userID','joined_at']]
     joins['joined_at'] = convertDates(joins['joined_at'],[1,'M'],exact)
     joins['experience'] = current_period - joins['joined_at']
