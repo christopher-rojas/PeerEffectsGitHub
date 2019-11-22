@@ -1,9 +1,8 @@
-#!/usr/bin/env python2.7
 """
 Collect GitHub Archive data and insert into mongodb.
 Make sure to run in a Python console, not iPython, for logging.
 """
-import CollectArchiveData_Modules
+import collectArchiveDataModules
 import os, sys, pymongo, time, gzip, json
 import logging
 import pandas as pd
