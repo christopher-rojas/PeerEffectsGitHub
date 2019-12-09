@@ -1,4 +1,3 @@
-#!/usr/bin/env python2.7
 """
 Collect GitHub Archive data and insert into mongodb.
 Make sure to run in a Python console, not iPython, for logging.
@@ -15,14 +14,16 @@ logging.basicConfig(filename='GitHubArchiveData.log',level=logging.INFO,format='
 starting_datetime = "2011-2-12-00"
 last_datetime = "2013-10-31 23:00:00"
 # Connect to MongoDB
-# Enter you own host-name, db_name, user-name and password.
+# Enter you own host-name, if not localhost
+# Enter the db_name, default is GitHubArchive
+# If necessary, enter user-name and password.
 MONGO_HOST = ""
-MONGO_DB = ""
+MONGO_DB = "GitHubArchive"
 MONGO_USER = ""
 MONGO_PASSWORD = ""
 #######
 
-connection=pymongo.MongoClient(MONGO_HOST)
+connection=pymongo.MongoClient()
 # Exit if unable to connect
 if connection is None:
     logging.info('No DB Connection')
@@ -79,7 +80,7 @@ while remaining >= 1:
                 remaining = len(time_periods)                
                 current_datetime = time_periods.pop(0)
 
-            except Exception, e1:
+            except Exception as e1:
                 # Adding data to mongodb failed
             
                 logging.info("Error adding data to mongodb")
@@ -89,7 +90,7 @@ while remaining >= 1:
                 os.remove(filename)
                 logging.info("File deleted")
                       
-        except Exception, e2:
+        except Exception as e2:
             # Opening the data failed
             logging.info('Error opening data')
             logging.info(str(e2))
@@ -97,7 +98,7 @@ while remaining >= 1:
             os.remove(filename) 
             logging.info('File deleted')
             
-    except Exception,e3:
+    except Exception as e3:
         # Downloading the data failed.
         logging.info('Error downloading data: ' + str(e3))
         logging.exception("message")

@@ -18,7 +18,7 @@ numIterations = 15 # number of alternations in alterating least squares, hyper-p
 
 likes_dir = "" # directory where adoption matrix AND mappings are saved
 likes_filename = "adoptions_matrix.npz" # name of adoption matrix filename
-uid_mapping_filename = "uid_to_idx.cxv" # name of mapping of user id to matrix position filename
+uid_mapping_filename = "uid_to_idx.csv" # name of mapping of user id to matrix position filename
 rid_mapping_filename = "rid_to_idx.csv" # name of mapping of repo id to matrix position filename
 
 output_data_dir = ""

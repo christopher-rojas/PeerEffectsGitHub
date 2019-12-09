@@ -1,11 +1,10 @@
-#!/usr/bin/env python2.7
 """
 Additional functions used to collect GitHub Archive data and insert into mongodb.
 """
 
 import logging
-from urllib.request import urlopen
 import urllib.request
+from urllib.request import urlopen
 
 def pretty_string(ugly_datetime):
     # Convert string in standard datetime format to correct format
@@ -31,8 +30,8 @@ def download_file(current_datetime):
        'Accept-Language': 'en-US,en;q=0.8',
        'Connection': 'keep-alive'}
        
-    req = urllib2.Request(url, headers=hdr)  
-    u = urllib2.urlopen(req)
+    req = urllib.request.Request(url, headers=hdr) 
+    u = urlopen(req)
     logging.info(u.getcode())
     if u.getcode() == 200:
         f = open(file_name, 'wb')
